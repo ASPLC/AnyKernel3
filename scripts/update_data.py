@@ -124,3 +124,5 @@ if __name__ == "__main__":
         sys.exit(1)
     # Exit 0 = data changed, 2 = no changes (both are success)
     sys.exit(0 if changed else 2)
+
+# ci-trigger: touch scripts/ to run Update GKI Kernel Data on demand (see commit message)
