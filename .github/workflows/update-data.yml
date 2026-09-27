@@ -12,6 +12,9 @@ on:
 
 permissions:
   contents: write
+  # update_workflow_choices.py 会把重新生成的选项列表写回 kernel-custom.yml
+  # 等工作流文件；推送含工作流变更的提交需要 workflows 权限，否则被远端拒绝
+  workflows: write
 
 concurrency:
   group: update-data

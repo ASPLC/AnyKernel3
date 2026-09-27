@@ -525,6 +525,17 @@ jobs:
           fi
           echo "内核 UAPI 已对齐官方管理器 (v4)，刷入后不再出现\"需要更新内核\"提示"
 
+      # SukiSU builtin 分支的 hook/lsm_hook.c 仍以旧签名调用
+      # security_add_hooks(hooks, count, "ksu")，6.8+ 内核要求 const struct lsm_id *，
+      # android16-6.12 GKI 编译直接失败；kpm/super_access.c 引用的
+      # netlink_kernel_cfg.cb_mutex 在 Linux 6.11 被移除，KPM 开启时同样失败。
+      # 补丁内部以 LINUX_VERSION_CODE 守卫，6.10 及以下内核行为不变，
+      # SukiSU 上游修复后按内容检测自动跳过。
+      - name: 应用 SukiSU 内核 API 兼容补丁 (6.8+ lsm_id / 6.11+ netlink cb_mutex)
+        if: inputs.ksu_variant == 'SukiSU'
+        working-directory: ${{ env.KERNEL_ROOT }}
+        run: bash "$GITHUB_WORKSPACE/scripts/sukisu_compat/apply.sh" KernelSU
+
       - name: 应用 SUSFS 补丁
         if: inputs.enable_susfs
         working-directory: ${{ env.KERNEL_ROOT }}
