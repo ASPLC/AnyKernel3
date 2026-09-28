@@ -58,6 +58,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "No data changes to commit."
           else
-            git commit -m "chore: update GKI kernel version data and build matrices"
+            git commit -m "chore: update GKI kernel version data"
+            git pull --rebase --autostash origin dev
             git push
           fi
