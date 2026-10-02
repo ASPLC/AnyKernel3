@@ -156,10 +156,18 @@ on:
         required: false
         type: boolean
         default: false
+      ksu_commit:
+        description: "官方最新上传构建的 KernelSU 提交（从 main.yml 传入；直接触发时自动取本工作流拉取的管理器构建）"
+        required: false
+        type: string
+        default: ""
 
 jobs:
   build-kernels-a15-6-6:
     name: "6.6.${{ matrix.display_sub || matrix.sub_level }}-${{ matrix.os_patch_level }}"
+    needs: get-ksu-manager
+    # 管理器作业被跳过（called_from_main）或失败时不阻塞构建；ksuCommit 为空时回退传入值或 main HEAD
+    if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
       matrix:
@@ -206,6 +214,7 @@ jobs:
       display_sub: ${{ matrix.display_sub || '' }}
       os_patch_level: ${{ matrix.os_patch_level }}
       ksu_variant: ${{ inputs.kernelsu_variant }}
+      ksu_commit: ${{ inputs.ksu_commit || needs.get-ksu-manager.outputs.ksuCommit }}
       version: ${{ inputs.version || '' }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
