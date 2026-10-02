@@ -30,6 +30,11 @@ on:
       ksu_variant:
         required: true
         type: string
+      ksu_commit:
+        description: "ReSukiSU 专用：KernelSU 检出到该提交以对齐官方最新上传构建（留空跟随 main HEAD）"
+        required: false
+        type: string
+        default: ""
 
       # ==================== 可选配置 ====================
       version:
@@ -461,6 +466,8 @@ jobs:
 
       - name: 添加 KernelSU
         working-directory: ${{ env.KERNEL_ROOT }}
+        env:
+          KSU_COMMIT: ${{ inputs.ksu_commit }}
         run: |
           case "${{ inputs.ksu_variant }}" in
             "SukiSU")
@@ -471,6 +478,20 @@ jobs:
             "ReSukiSU")
               echo "添加 ReSukiSU..."
               curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash $BRANCH
+              # 内核侧 KernelSU 检出到官方最新上传 Manager 构建的同一提交
+              #（Kbuild 以 30700 + git 提交数 计算版本，与官方管理器 versionCode 同源同值），
+              # 保证内核 KSU 版本与拉取的管理器安装包严格一致
+              if [ -n "$KSU_COMMIT" ]; then
+                if ! git -C KernelSU checkout --detach "$KSU_COMMIT" 2>/dev/null; then
+                  git -C KernelSU fetch origin "$KSU_COMMIT"
+                  git -C KernelSU checkout --detach "$KSU_COMMIT"
+                fi
+                if [ "$(git -C KernelSU rev-parse HEAD)" != "$KSU_COMMIT" ]; then
+                  echo "::error::KernelSU 检出官方构建提交 $KSU_COMMIT 失败，无法对齐管理器版本"
+                  exit 1
+                fi
+                echo "KernelSU 已检出到官方上传构建提交 $KSU_COMMIT (KSU 版本 $((30700 + $(git -C KernelSU rev-list --count HEAD))))"
+              fi
               bash "$GITHUB_WORKSPACE/scripts/ksu_post_setup.sh" KernelSU resukisu
               ;;
             *)

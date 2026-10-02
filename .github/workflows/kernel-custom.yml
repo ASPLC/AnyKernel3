@@ -106,7 +106,7 @@ on:
           - "185 (2025-07)"
           - "189 (2025-09)"
           - "194 (2025-12)"
-          - "lts (5.15.217)"
+          - "lts (5.15.220)"
       sub_level_6_1:
         description: "6.1 子版本 (选择后自动匹配安全补丁级别；仅内核版本为 6.1 时生效)"
         required: false
@@ -170,7 +170,7 @@ on:
           - "118 (2026-01)"
           - "127 (2026-04)"
           - "139 (2026-07)"
-          - "lts (6.6.143)"
+          - "lts (6.6.144)"
       sub_level_6_12:
         description: "6.12 子版本 (选择后自动匹配安全补丁级别；仅内核版本为 6.12 时生效)"
         required: false
@@ -390,7 +390,9 @@ jobs:
 
   build-custom-kernel:
     name: "${{ needs.resolve-version.outputs.kernel_full }}-${{ needs.resolve-version.outputs.android_version }}-${{ needs.resolve-version.outputs.os_patch_level }}"
-    needs: resolve-version
+    needs: [resolve-version, get-ksu-manager]
+    # 管理器拉取失败时不阻塞内核构建（ksuCommit 为空则内核跟随 main HEAD）
+    if: ${{ !cancelled() && needs.resolve-version.result == 'success' }}
     uses: ./.github/workflows/build.yml
     secrets: inherit
     with:
@@ -400,6 +402,9 @@ jobs:
       os_patch_level: ${{ needs.resolve-version.outputs.os_patch_level }}
       revision: "r1"
       ksu_variant: ${{ inputs.kernelsu_variant }}
+      # 内核侧 KernelSU 检出到官方最新上传 Manager 构建的同一提交，
+      # 使内核 KSU 版本与拉取的管理器安装包严格一致（ReSukiSU 生效）
+      ksu_commit: ${{ needs.get-ksu-manager.outputs.ksuCommit }}
       version: ${{ inputs.version || '' }}
       build_time: ${{ inputs.build_time || '' }}
       use_zram: ${{ inputs.use_zram }}
@@ -415,6 +420,7 @@ jobs:
       artifact_upload_mode: ${{ inputs.artifact_upload_mode }}
       skip_incompatible: ${{ inputs.skip_incompatible || false }}
 
+  # 先拉取官方最新上传的 Manager 构建并输出其提交 SHA，供内核构建对齐
   get-ksu-manager:
     uses: ./.github/workflows/get-manager.yml
     secrets: inherit

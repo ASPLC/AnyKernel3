@@ -18,6 +18,14 @@ on:
         description: "The calculated KSU version number"
         value: ${{ jobs.get_ksu_manager.outputs.ksuVer }}
 
+      managerVer:
+        description: "官方最新上传 Manager 构建的实测版本号"
+        value: ${{ jobs.get_ksu_manager.outputs.managerVer }}
+
+      ksuCommit:
+        description: "官方最新上传 Manager 构建对应的提交 SHA（内核侧对齐用）"
+        value: ${{ jobs.get_ksu_manager.outputs.ksuCommit }}
+
 jobs:
   get_ksu_manager:
     runs-on: ubuntu-latest
@@ -26,6 +34,10 @@ jobs:
       ksuVer: ${{ steps.get_version.outputs.kversion }}
       # 输出2: SUSFS版本号
       susVer: ${{ steps.get_version.outputs.sversion }}
+      # 输出3: Manager 实测版本号
+      managerVer: ${{ steps.add_KSU.outputs.managerVer }}
+      # 输出4: 官方最新上传构建的提交 SHA（内核侧对齐用）
+      ksuCommit: ${{ steps.add_KSU.outputs.ksuCommit }}
     env:
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
       CCACHE_NOHASHDIR: "true"
@@ -202,6 +214,7 @@ jobs:
 
             MANAGER_VERSION="$ACTUAL_VERSION"
             MANAGER_BUILD_ID="$BUILD_ID"
+            MANAGER_HEAD_SHA="$HEAD_SHA"
             break
           done < <(sort -u -t$'\t' -k1,1r "$CAND_FILE")
           rm -f "$CAND_FILE"
@@ -210,11 +223,26 @@ jobs:
             echo "未获取到官方 main 分支最新上传的 Manager artifact。"
             exit 1
           fi
-          echo "选择 Manager 构建 $MANAGER_BUILD_ID (main), APK 实测版本 $MANAGER_VERSION"
-          if [ -n "${KSU_VERSION:-}" ] && [ "$MANAGER_VERSION" != "$KSU_VERSION" ]; then
+          echo "选择 Manager 构建 $MANAGER_BUILD_ID (main, ${MANAGER_HEAD_SHA:0:8}), APK 实测版本 $MANAGER_VERSION"
+          if [ "${{ inputs.kernelsu_variant }}" == "ReSukiSU" ]; then
+            # ReSukiSU 内核侧将检出到该构建的同一提交（与拉取的安装包严格同源），
+            # 因此对比"该提交对应的 KSU 版本"而非 main HEAD 的版本
+            PIN_COUNT=$(git -C KernelSU rev-list --count "$MANAGER_HEAD_SHA" 2>/dev/null || echo "")
+            if [ -n "$PIN_COUNT" ]; then
+              PINNED_KSU_VERSION=$((30700 + PIN_COUNT))
+              echo "内核 KSU 版本将对齐官方构建提交 ${MANAGER_HEAD_SHA:0:8}: $PINNED_KSU_VERSION"
+              if [ "$MANAGER_VERSION" != "$PINNED_KSU_VERSION" ]; then
+                echo "::warning::Manager 实测版本 $MANAGER_VERSION 与官方构建提交对应的 KSU 版本 $PINNED_KSU_VERSION 不一致"
+              fi
+            elif [ -n "${KSU_VERSION:-}" ] && [ "$MANAGER_VERSION" != "$KSU_VERSION" ]; then
+              echo "::warning::Manager 实测版本 $MANAGER_VERSION 与内核 KSU 版本 ${KSU_VERSION} 不一致（无法计算官方构建提交对应的版本）"
+            fi
+          elif [ -n "${KSU_VERSION:-}" ] && [ "$MANAGER_VERSION" != "$KSU_VERSION" ]; then
             echo "::warning::Manager 实测版本 $MANAGER_VERSION 与内核 KSU 版本 ${KSU_VERSION} 不一致（已按需求拉取官方最新上传的构建）"
           fi
           echo "MANAGER_VERSION=$MANAGER_VERSION" >> $GITHUB_ENV
+          echo "managerVer=$MANAGER_VERSION" >> $GITHUB_OUTPUT
+          echo "ksuCommit=$MANAGER_HEAD_SHA" >> $GITHUB_OUTPUT
 
           if [ "${{ inputs.kernelsu_variant }}" == "ReSukiSU" ]; then
             echo "仅保留 ReSukiSU arm64-v8a release 管理器..."
